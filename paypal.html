@@ -1,0 +1,399 @@
+<!--
+Proyecto: Mock PayPal (solo visual) — PWA offline para tu celular
+Descripción: App web 100% visual (sin backend) para mostrar saldo/movimientos falsos.
+Instalable como Web App (Add to Home Screen). Funciona offline. Datos en localStorage.
+Autor: (tu nombre)
+Licencia: MIT
+
+Estructura de archivos (crea estas 4+2 imágenes en una carpeta):
+  /mock-paypal/
+    ├─ index.html              ← este archivo
+    ├─ sw.js
+    ├─ manifest.webmanifest
+    ├─ styles.css              (opcional, ya viene inline, pero puedes separarlo)
+    ├─ icon-192.png
+    └─ icon-512.png
+
+Pasos rápidos:
+1) Guarda cada bloque en su archivo correspondiente (ver títulos más abajo).
+2) Sube la carpeta a un hosting simple (o abre index.html desde un servidor local).
+   - Recomendado: usar una extensión tipo “Live Server” en VS Code o un hosting estático (GitHub Pages, Netlify, etc.).
+3) Abre en tu celular con Chrome/Edge/Brave (Android) o Safari (iOS).
+4) “Agregar a la pantalla de inicio” para instalar como app.
+5) Disfruta: todo es visual, editable y offline. ¡No hay dinero real!
+-->
+
+<!-- ============================= -->
+<!-- ======== index.html ========= -->
+<!-- ============================= -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>PayPal — Saldo</title>
+  <meta name="theme-color" content="#003087" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    :root{--pp-blue:#003087;--pp-blue-2:#0070E0;--pp-bg:#F5F7FA;--pp-text:#111;--pp-muted:#6b7280;--card:#fff;--ok:#0f9d58;--bad:#d93025;}
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Helvetica,Arial,sans-serif;background:var(--pp-bg);color:var(--pp-text)}
+    .appbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:.5rem;padding:.85rem 1rem;background:var(--pp-blue);color:#fff}
+    .logo{display:flex;align-items:center;gap:.5rem;font-weight:700;letter-spacing:.2px}
+    .pill{margin-left:auto;display:inline-flex;gap:.5rem}
+    .btn{appearance:none;border:0;border-radius:999px;padding:.55rem .9rem;background:#0a84ff;color:#fff;font-weight:600}
+    .btn.ghost{background:transparent;color:#fff;outline:1px solid rgba(255,255,255,.4)}
+    .container{max-width:720px;margin:0 auto;padding:1rem}
+    .card{background:var(--card);border-radius:18px;box-shadow:0 6px 24px rgba(0,0,0,.08);padding:1rem}
+    .balance{display:flex;align-items:end;justify-content:space-between}
+    .currency{color:var(--pp-muted);font-weight:600}
+    .amount{font-size:2.4rem;font-weight:800;}
+    .controls{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+    .chip{border-radius:12px;padding:.45rem .7rem;background:#eef2ff;color:#1f2937;font-weight:600;border:1px solid #e5e7eb}
+    .list{margin-top:1rem}
+    .row{display:flex;align-items:center;justify-content:space-between;padding:.9rem .6rem;border-bottom:1px solid #eee}
+    .row:last-child{border-bottom:0}
+    .row .left{display:flex;gap:.75rem;align-items:center}
+    .avatar{width:38px;height:38px;border-radius:10px;background:#e5ecfa;display:grid;place-items:center;font-weight:800;color:#274}
+    .title{font-weight:700}
+    .subtitle{font-size:.85rem;color:var(--pp-muted)}
+    .value.ok{color:var(--ok);font-weight:800}
+    .value.bad{color:var(--bad);font-weight:800}
+    .foot-actions{display:flex;gap:.6rem;justify-content:center;margin:1rem 0 0}
+    .tiny{font-size:.78rem;color:var(--pp-muted);text-align:center;margin-top:.5rem}
+    dialog{border:0;border-radius:16px;max-width:520px;width:92%;padding:0}
+    .d-wrap{padding:1rem}
+    .field{display:flex;flex-direction:column;gap:.25rem;margin:.6rem 0}
+    input,select,textarea{width:100%;padding:.7rem .8rem;border-radius:12px;border:1px solid #e5e7eb;background:#fff}
+    .row-actions{display:flex;gap:.4rem}
+    .link{color:var(--pp-blue-2);font-weight:700;text-decoration:none}
+    .warn{color:#b45309}
+  </style>
+</head>
+<body>
+  <header class="appbar">
+    <div class="logo">💳 PayPal</div>
+    <div class="pill">
+      <button id="btnExport" class="btn ghost">Exportar</button>
+      <button id="btnImport" class="btn ghost">Importar</button>
+      <button id="btnReset" class="btn">Reiniciar</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="balance">
+        <div>
+          <div class="currency" id="currencyLabel">Saldo disponible (USD)</div>
+          <div class="amount" id="amountLabel">$ 0.00</div>
+        </div>
+        <button id="btnEditBalance" class="btn">Editar saldo</button>
+      </div>
+      <div class="controls">
+        <span class="chip" id="chipAdd">+ Agregar movimiento</span>
+        <span class="chip" id="chipCurrency">Cambiar moneda</span>
+        <span class="chip" id="chipTheme">Tema</span>
+        <span class="chip" id="chipAbout">Acerca de</span>
+      </div>
+    </section>
+
+    <section class="card list" id="txList">
+      <!-- Transacciones render acá -->
+    </section>
+
+    <div class="foot-actions">
+      <button class="btn" id="btnFakePay">Generar “pago”</button>
+      <button class="btn" id="btnFakeRefund">Generar “reintegro”</button>
+    </div>
+    <div class="tiny">Solo visual. Sin conexión bancaria. Funciona offline. — Hecho por vos 😎</div>
+  </main>
+
+  <dialog id="dlgBalance">
+    <div class="d-wrap">
+      <h3>Editar saldo</h3>
+      <div class="field">
+        <label>Monto</label>
+        <input id="inBalance" type="number" step="0.01" placeholder="100000" />
+      </div>
+      <div class="row-actions" style="justify-content:flex-end;margin-top:.6rem">
+        <button class="btn ghost" data-close>Cancelar</button>
+        <button class="btn" id="saveBalance">Guardar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgTx">
+    <div class="d-wrap">
+      <h3>Nuevo movimiento</h3>
+      <div class="field"><label>Tipo</label>
+        <select id="txType">
+          <option value="in">Entrada (+)</option>
+          <option value="out">Salida (−)</option>
+        </select>
+      </div>
+      <div class="field"><label>Contraparte (nombre)</label>
+        <input id="txWho" placeholder="John Doe / Tienda XYZ" />
+      </div>
+      <div class="field"><label>Concepto</label>
+        <input id="txWhat" placeholder="Pago, Reintegro, Transferencia…" />
+      </div>
+      <div class="field"><label>Monto</label>
+        <input id="txAmount" type="number" step="0.01" placeholder="250.00" />
+      </div>
+      <div class="field"><label>Fecha/Hora</label>
+        <input id="txWhen" type="datetime-local" />
+      </div>
+      <div class="row-actions" style="justify-content:space-between;margin-top:.6rem">
+        <button class="btn ghost" data-close>Cancelar</button>
+        <button class="btn" id="saveTx">Guardar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgImport">
+    <div class="d-wrap">
+      <h3>Importar JSON</h3>
+      <div class="field">
+        <textarea id="inJSON" rows="8" placeholder='Pega aquí el JSON exportado'></textarea>
+      </div>
+      <div class="row-actions" style="justify-content:flex-end">
+        <button class="btn ghost" data-close>Cancelar</button>
+        <button class="btn" id="doImport">Importar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgAbout">
+    <div class="d-wrap">
+      <h3>Mock PayPal (solo visual)</h3>
+      <p>Esta app simula saldo y movimientos. No está conectada a bancos ni PayPal. Úsala para demos, memes o diseños.</p>
+      <p class="warn"><strong>Advertencia:</strong> No la uses para engañar a nadie. Eso sería fraude.</p>
+      <div class="row-actions" style="justify-content:flex-end">
+        <button class="btn" data-close>Cerrar</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    // ===== Utilidades =====
+    const $ = s => document.querySelector(s);
+    const fmt = (n, cur) => new Intl.NumberFormat(undefined, {style:'currency', currency:cur}).format(n||0);
+    const uid = () => Math.random().toString(36).slice(2,9);
+
+    // ===== Estado =====
+    const STATE_KEY = 'mockpp_state_v1';
+    const DEFAULT = {currency:'USD', balance:0, theme:'light', tx:[]};
+    let state = load();
+
+    function load(){
+      try{ return JSON.parse(localStorage.getItem(STATE_KEY)) || DEFAULT }catch{ return DEFAULT }
+    }
+    function save(){ localStorage.setItem(STATE_KEY, JSON.stringify(state)); render() }
+
+    // ===== Render =====
+    function render(){
+      $('#currencyLabel').textContent = `Saldo disponible (${state.currency})`;
+      $('#amountLabel').textContent = fmt(state.balance, state.currency);
+      document.documentElement.style.colorScheme = state.theme === 'dark' ? 'dark' : 'light';
+      const list = $('#txList');
+      list.innerHTML = state.tx.map(t => `
+        <div class="row" data-id="${t.id}">
+          <div class="left">
+            <div class="avatar">${t.type==='in' ? '+' : '–'}</div>
+            <div>
+              <div class="title">${t.who || '—'}</div>
+              <div class="subtitle">${t.what || ''} · ${new Date(t.when).toLocaleString()}</div>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div class="value ${t.type==='in'?'ok':'bad'}">${t.type==='in' ? '+' : '−'} ${fmt(t.amount, state.currency)}</div>
+            <div class="subtitle">Saldo: ${fmt(t.balanceAfter, state.currency)}</div>
+            <div class="row-actions"><button class="btn ghost" data-del>Eliminar</button></div>
+          </div>
+        </div>`).join('');
+
+      // eliminar
+      list.querySelectorAll('[data-del]').forEach(btn => btn.onclick = e => {
+        const id = e.target.closest('.row').dataset.id;
+        state.tx = state.tx.filter(x => x.id !== id);
+        recomputeBalance();
+        save();
+      });
+    }
+
+    function recomputeBalance(){
+      let bal = 0;
+      // ordenar por fecha asc
+      state.tx.sort((a,b)=> new Date(a.when)-new Date(b.when));
+      for(const t of state.tx){
+        bal += (t.type==='in'?1:-1) * Number(t.amount||0);
+        t.balanceAfter = bal;
+      }
+      state.balance = bal;
+    }
+
+    // ===== Interacciones =====
+    $('#btnEditBalance').onclick = ()=>{
+      $('#inBalance').value = state.balance.toString();
+      $('#dlgBalance').showModal();
+    };
+    $('[data-close]')?.addEventListener('click', e=> e.target.closest('dialog').close());
+    document.querySelectorAll('[data-close]').forEach(b=> b.onclick = e=> e.target.closest('dialog').close());
+
+    $('#saveBalance').onclick = ()=>{
+      const v = Number($('#inBalance').value||0);
+      // ajustar última tx para cuadrar (opcional): simple set directo
+      state.balance = v;
+      // recalcular balances parciales a partir de tx existentes proporcionalmente
+      let total = 0;
+      state.tx.forEach(t=> total += (t.type==='in'?1:-1) * Number(t.amount||0));
+      const diff = v - total;
+      if(Math.abs(diff) > 0.0001){
+        // insertar tx de ajuste
+        state.tx.push({id:uid(), type: diff>=0?'in':'out', who:'Ajuste', what:'Edición de saldo', amount:Math.abs(diff), when:new Date().toISOString(), balanceAfter:0});
+        recomputeBalance();
+      }
+      save();
+      $('#dlgBalance').close();
+    };
+
+    function openTxDialog(pref={}){
+      $('#txType').value = pref.type||'in';
+      $('#txWho').value = pref.who||'';
+      $('#txWhat').value = pref.what||'';
+      $('#txAmount').value = pref.amount||'';
+      $('#txWhen').value = pref.when ? pref.when.slice(0,16) : new Date().toISOString().slice(0,16);
+      $('#dlgTx').showModal();
+    }
+
+    $('#chipAdd').onclick = ()=> openTxDialog();
+    $('#btnFakePay').onclick = ()=> openTxDialog({type:'out', who:'Steam', what:'Pago', amount:19.99});
+    $('#btnFakeRefund').onclick = ()=> openTxDialog({type:'in', who:'Reembolso', what:'Refund', amount:19.99});
+
+    $('#saveTx').onclick = ()=>{
+      const t = {
+        id: uid(),
+        type: $('#txType').value,
+        who: $('#txWho').value.trim(),
+        what: $('#txWhat').value.trim(),
+        amount: Number($('#txAmount').value||0),
+        when: new Date($('#txWhen').value).toISOString(),
+        balanceAfter: 0
+      };
+      state.tx.push(t);
+      recomputeBalance();
+      save();
+      $('#dlgTx').close();
+    };
+
+    $('#chipCurrency').onclick = ()=>{
+      const cur = prompt('Código de moneda (ISO 4217): USD, EUR, UYU, ARS, etc.', state.currency||'USD');
+      if(cur){ state.currency = cur.toUpperCase(); save(); }
+    };
+    $('#chipTheme').onclick = ()=>{
+      state.theme = state.theme==='dark'?'light':'dark';
+      save();
+    };
+    $('#chipAbout').onclick = ()=> $('#dlgAbout').showModal();
+
+    // Exportar / Importar / Reset
+    $('#btnExport').onclick = ()=>{
+      const data = JSON.stringify(state, null, 2);
+      const blob = new Blob([data], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mock-paypal-state.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+    $('#btnImport').onclick = ()=> $('#dlgImport').showModal();
+    $('#doImport').onclick = ()=>{
+      try{
+        const obj = JSON.parse($('#inJSON').value||'{}');
+        if(!obj || typeof obj!== 'object') throw new Error('JSON inválido');
+        state = {...DEFAULT, ...obj};
+        recomputeBalance();
+        save();
+        $('#dlgImport').close();
+      }catch(err){ alert('Error al importar: '+err.message); }
+    };
+    $('#btnReset').onclick = ()=>{
+      if(confirm('¿Borrar todos los datos locales?')){
+        localStorage.removeItem(STATE_KEY); state = {...DEFAULT}; save();
+      }
+    };
+
+    // ===== Service Worker =====
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', ()=>{
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+
+    // Init
+    recomputeBalance();
+    render();
+  </script>
+</body>
+</html>
+
+
+<!-- ========================== -->
+<!-- ======== sw.js =========== -->
+<!-- ========================== -->
+// Guarda este bloque como sw.js en la misma carpeta
+const CACHE_NAME = 'mockpp-cache-v1';
+const ASSETS = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './icon-192.png',
+  './icon-512.png'
+];
+self.addEventListener('install', (e)=>{
+  e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(ASSETS)));
+});
+self.addEventListener('activate', (e)=>{
+  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))));
+});
+self.addEventListener('fetch', (e)=>{
+  e.respondWith(
+    caches.match(e.request).then(r=> r || fetch(e.request))
+  );
+});
+
+
+<!-- ==================================== -->
+<!-- ===== manifest.webmanifest ========= -->
+<!-- ==================================== -->
+{
+  "name": "PayPal — Saldo (Mock)",
+  "short_name": "PayPal Mock",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#003087",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
+
+
+<!-- ======================================== -->
+<!-- ====== ICONOS (rápidos de ejemplo) ===== -->
+<!-- ======================================== -->
+<!-- Crea dos imágenes PNG sencillas para que Chrome/Safari permita instalar la PWA. 
+     Puedes usar las siguientes imágenes base64 pegándolas en un editor online para guardarlas como PNG.
+     O crea las tuyas propias (192x192 y 512x512). -->
+
+<!-- icon-192.png (azul simple) base64 PNG:  -->
+<!-- iVBORw0KGgoAAAANSUhEUgAAAMAAAADAAQAAAAB4r8jWAAAACXBIWXMAAAsSAAALEgHS3X78AAABP0lEQVR4nO3SMQ7CMBQF0VqBdv//9gEo1q0p6u7oQY0D6qf8e8m3wq9i6mI2o8Cdn9q8S5r8o7Qv8g3m9Qb6k6mQ0H3P2g7e8Cw2m6Vw2lL2e0t4a9f3y3mVd2l0m8xC7r0Wlqf4mN7l7q5W2Q4i9g7TgCw6r3nQF3q0g0mYJz0y2m6mIu1bJ8Qe9VQv5x4vS6X3kWbK8wI0h3fJ3gN7wCwC3Z5g7m0M2g4sT2r1pV9wQ1m+SxvJ0pN0sHcVJw14oFZ1i7P0s8Wg+2z15dG9C6p2c3d3H2Qf4Jw0h9wGx0AAAAASUVORK5CYII= -->
+
+<!-- icon-512.png (azul simple) base64 PNG:  -->
+<!-- iVBORw0KGgoAAAANSUhEUgAAAaAAAAGgAQAAAAB1bV8dAAAACXBIWXMAAAsSAAALEgHS3X78AAABa0lEQVR4nO3SsQ3CMBQF0ZpB2v//tQYo1q0p6u7oQY0D6ifm9yab4VfF3WRVw7m7d1z8wV9f9m5c4c2b1p8g7m9Qb6k6mQ0H3P2g7e8Cw2m6Vw2lL2e0t4a9f3y3mVd2l0m8xC7r0Wlqf4mN7l7q5W2Q4i9g7TgCw6r3nQF3q0g0mYJz0y2m6mIu1bJ8Qe9VQv5x4vS6X3kWbK8wI0h3fJ3gN7wCwC3Z5g7m0M2g4sT2r1pV9wQ1m+SxvJ0pN0sHcVJw14oFZ1i7P0s8Wg+2z15dG9C6p2c3d3H2Qf4Jw0h9wGx0AAAAASUVORK5CYII= -->
+
+<!-- Cómo convertir esas cadenas en PNG: pega la cadena base64 en https://codebeautify.org/base64-to-image y descarga el PNG con el nombre correcto. O crea iconos propios. -->
